@@ -4,6 +4,8 @@ pub fn build(b: *std.build.Builder) void {
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
+    b.prominent_compile_errors = true;
+    b.use_stage1 = false;
 
     const lib = b.addStaticLibrary("demangle", null);
     lib.setBuildMode(mode);
@@ -27,6 +29,8 @@ pub fn build(b: *std.build.Builder) void {
 
     const main_tests = b.addTest("src/main.zig");
     main_tests.setBuildMode(mode);
+    main_tests.linkLibrary(lib);
+    main_tests.linkLibC();
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);

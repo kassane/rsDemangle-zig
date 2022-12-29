@@ -5,11 +5,9 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
     b.prominent_compile_errors = true;
-    b.use_stage1 = false;
 
     const lib = b.addStaticLibrary("demangle", null);
     lib.setBuildMode(mode);
-    lib.addCSourceFile("src/rust-demangle.c", &[_][]const u8{ "-std=c99", "-Os" });
     lib.linkLibC();
     lib.install();
 

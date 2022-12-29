@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const mem = std.mem;
-const demangle = @import("demangle.zig"); // WIP
+const demangle = @import("demangle.zig");
 
 pub fn main() void {
     const print = std.debug.print;

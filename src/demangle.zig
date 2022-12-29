@@ -3,6 +3,7 @@ const C = @cImport({
     @cInclude("stdio.h");
     @cInclude("string.h");
 });
+const std = @import("std");
 
 pub const demangle_callbackref = ?*const fn ([*c]const u8, usize, ?*anyopaque) callconv(.C) void;
 pub const struct_rust_demangler = extern struct {
@@ -141,17 +142,15 @@ pub fn print_str(arg_rdm: [*c]struct_rust_demangler, arg_data: [*c]const u8, arg
 }
 pub fn print_uint64(arg_rdm: [*c]struct_rust_demangler, arg_x: u64) callconv(.C) void {
     var rdm = arg_rdm;
-    var x = arg_x;
     var s: [21]u8 = undefined;
-    _ = C.sprintf(@ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), &s)), "%lu", x);
-    print_str(rdm, @ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), &s)), C.strlen(@ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), &s))));
+    var x = std.fmt.bufPrintZ(&s, "{d}", .{arg_x}) catch @panic("fmt error");
+    print_str(rdm, x, x.len);
 }
 pub fn print_uint64_hex(arg_rdm: [*c]struct_rust_demangler, arg_x: u64) callconv(.C) void {
     var rdm = arg_rdm;
-    var x = arg_x;
     var s: [17]u8 = undefined;
-    _ = C.sprintf(@ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), &s)), "%lx", x);
-    print_str(rdm, @ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), &s)), C.strlen(@ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), &s))));
+    var x = std.fmt.bufPrintZ(&s, "{d}", .{arg_x}) catch @panic("fmt error");
+    print_str(rdm, x, x.len);
 }
 pub fn decode_lower_hex_nibble(arg_nibble: u8) callconv(.C) c_int {
     var nibble = arg_nibble;
@@ -196,7 +195,7 @@ pub fn decode_legacy_escape(arg_e: [*c]const u8, arg_len: usize, arg_out_len: [*
             lo_nibble = decode_lower_hex_nibble(e[@intCast(c_uint, @as(c_int, 2))]);
             if (lo_nibble < @as(c_int, 0)) return 0;
             if (hi_nibble > @as(c_int, 7)) return 0;
-            c = @bitCast(u8, @truncate(i8, (hi_nibble << @intCast(@import("std").math.Log2Int(c_int), 4)) | lo_nibble));
+            c = @bitCast(u8, @truncate(i8, (hi_nibble << @intCast(std.math.Log2Int(c_int), 4)) | lo_nibble));
             if (@bitCast(c_int, @as(c_uint, c)) < @as(c_int, 32)) return 0;
         }
     }
@@ -245,10 +244,10 @@ pub fn print_ident(arg_rdm: [*c]struct_rust_demangler, arg_ident: struct_rust_ma
                 }
             } else if (@bitCast(c_int, @as(c_uint, ident.ascii[@intCast(c_uint, @as(c_int, 0))])) == @as(c_int, '.')) {
                 if ((ident.ascii_len >= @bitCast(c_ulong, @as(c_long, @as(c_int, 2)))) and (@bitCast(c_int, @as(c_uint, ident.ascii[@intCast(c_uint, @as(c_int, 1))])) == @as(c_int, '.'))) {
-                    print_str(rdm, "::", C.strlen("::"));
+                    print_str(rdm, "::", std.mem.len("::"));
                     len = 2;
                 } else {
-                    print_str(rdm, "-", C.strlen("-"));
+                    print_str(rdm, "-", std.mem.len("-"));
                     len = 1;
                 }
             } else {
@@ -276,7 +275,7 @@ pub fn print_ident(arg_rdm: [*c]struct_rust_demangler, arg_ident: struct_rust_ma
             return;
         }
     }
-    out = @ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), C.malloc(cap *% @bitCast(c_ulong, @as(c_long, @as(c_int, 4))))));
+    out = @ptrCast([*c]u8, @alignCast(std.meta.alignment([*c]u8), std.c.malloc(cap * 4)));
     if (!(out != null)) {
         rdm.*.errored = 1;
         return;
@@ -347,14 +346,14 @@ pub fn print_ident(arg_rdm: [*c]struct_rust_demangler, arg_ident: struct_rust_ma
                 @"error" = -@as(c_int, 1);
             }
         }
-        p = @ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), C.realloc(@ptrCast(?*anyopaque, out), cap *% @bitCast(c_ulong, @as(c_long, @as(c_int, 4))))));
+        p = @ptrCast([*c]u8, @alignCast(std.meta.alignment([*c]u8), std.c.realloc(out, cap * 4)));
         if (!(p != null)) {
             rdm.*.errored = 1;
             @"error" = -@as(c_int, 1);
         }
         out = p;
         p = out + (i *% @bitCast(c_ulong, @as(c_long, @as(c_int, 4))));
-        _ = C.memmove(@ptrCast(?*anyopaque, p + @bitCast(usize, @intCast(isize, @as(c_int, 4)))), @ptrCast(?*const anyopaque, p), ((len -% i) -% @bitCast(c_ulong, @as(c_long, @as(c_int, 1)))) *% @bitCast(c_ulong, @as(c_long, @as(c_int, 4))));
+        _ = C.memmove(@ptrCast(?*anyopaque, p + 4), @ptrCast(?*const anyopaque, p), ((len -% i) -% 1) *% 4);
         p[@intCast(c_uint, @as(c_int, 0))] = @bitCast(u8, @truncate(u8, if (c >= @bitCast(c_uint, @as(c_int, 65536))) @bitCast(c_uint, @as(c_int, 240)) | (c >> @intCast(u5, 18)) else @bitCast(c_uint, @as(c_int, 0))));
         p[@intCast(c_uint, @as(c_int, 1))] = @bitCast(u8, @truncate(u8, if (c >= @bitCast(c_uint, @as(c_int, 2048))) @bitCast(c_uint, if (c < @bitCast(c_uint, @as(c_int, 65536))) @as(c_int, 224) else @as(c_int, 128)) | ((c >> @intCast(u5, 12)) & @bitCast(c_uint, @as(c_int, 63))) else @bitCast(c_uint, @as(c_int, 0))));
         p[@intCast(c_uint, @as(c_int, 2))] = @bitCast(u8, @truncate(u8, @bitCast(c_uint, if (c < @bitCast(c_uint, @as(c_int, 2048))) @as(c_int, 192) else @as(c_int, 128)) | ((c >> @intCast(u5, 6)) & @bitCast(c_uint, @as(c_int, 63)))));
@@ -391,9 +390,9 @@ pub fn print_ident(arg_rdm: [*c]struct_rust_demangler, arg_ident: struct_rust_ma
             ] = out[i];
         };
     }
-    print_str(rdm, @ptrCast([*c]const u8, @alignCast(@import("std").meta.alignment([*c]const u8), out)), j);
+    print_str(rdm, @ptrCast([*c]const u8, @alignCast(std.meta.alignment([*c]const u8), out)), j);
     if (@"error" != @as(c_int, 0)) {
-        C.free(@ptrCast(?*anyopaque, out));
+        std.c.free(out);
     }
 }
 pub fn print_lifetime_from_index(arg_rdm: [*c]struct_rust_demangler, arg_lt: u64) callconv(.C) void {
@@ -401,9 +400,9 @@ pub fn print_lifetime_from_index(arg_rdm: [*c]struct_rust_demangler, arg_lt: u64
     var lt = arg_lt;
     var c: u8 = undefined;
     var depth: u64 = undefined;
-    print_str(rdm, "'", C.strlen("'"));
+    print_str(rdm, "'", std.mem.len("'"));
     if (lt == @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) {
-        print_str(rdm, "_", C.strlen("_"));
+        print_str(rdm, "_", std.mem.len("_"));
         return;
     }
     depth = rdm.*.bound_lifetime_depth -% lt;
@@ -411,7 +410,7 @@ pub fn print_lifetime_from_index(arg_rdm: [*c]struct_rust_demangler, arg_lt: u64
         c = @bitCast(u8, @truncate(u8, @bitCast(c_ulong, @as(c_long, @as(c_int, 'a'))) +% depth));
         print_str(rdm, &c, @bitCast(usize, @as(c_long, @as(c_int, 1))));
     } else {
-        print_str(rdm, "_", C.strlen("_"));
+        print_str(rdm, "_", std.mem.len("_"));
         print_uint64(rdm, depth);
     }
 }
@@ -422,18 +421,18 @@ pub fn demangle_binder(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
     if (rdm.*.errored != 0) return;
     bound_lifetimes = parse_opt_integer_62(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'G'))));
     if (bound_lifetimes > @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) {
-        print_str(rdm, "for<", C.strlen("for<"));
+        print_str(rdm, "for<", std.mem.len("for<"));
         {
             i = 0;
             while (i < bound_lifetimes) : (i +%= 1) {
                 if (i > @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) {
-                    print_str(rdm, ", ", C.strlen(", "));
+                    print_str(rdm, ", ", std.mem.len(", "));
                 }
                 rdm.*.bound_lifetime_depth +%= 1;
                 print_lifetime_from_index(rdm, @bitCast(u64, @as(c_long, @as(c_int, 1))));
             }
         }
-        print_str(rdm, "> ", C.strlen("> "));
+        print_str(rdm, "> ", std.mem.len("> "));
     }
 }
 pub fn demangle_path(arg_rdm: [*c]struct_rust_demangler, arg_in_value: c_int) callconv(.C) void {
@@ -459,9 +458,9 @@ pub fn demangle_path(arg_rdm: [*c]struct_rust_demangler, arg_in_value: c_int) ca
                 name = parse_ident(rdm);
                 print_ident(rdm, name);
                 if (rdm.*.verbose != 0) {
-                    print_str(rdm, "[", C.strlen("["));
+                    print_str(rdm, "[", std.mem.len("["));
                     print_uint64_hex(rdm, dis);
-                    print_str(rdm, "]", C.strlen("]"));
+                    print_str(rdm, "]", std.mem.len("]"));
                 }
                 break;
             },
@@ -475,15 +474,15 @@ pub fn demangle_path(arg_rdm: [*c]struct_rust_demangler, arg_in_value: c_int) ca
                 dis = parse_disambiguator(rdm);
                 name = parse_ident(rdm);
                 if ((@bitCast(c_int, @as(c_uint, ns)) >= @as(c_int, 'A')) and (@bitCast(c_int, @as(c_uint, ns)) <= @as(c_int, 'Z'))) {
-                    print_str(rdm, "::{", C.strlen("::{"));
+                    print_str(rdm, "::{", std.mem.len("::{"));
                     while (true) {
                         switch (@bitCast(c_int, @as(c_uint, ns))) {
                             @as(c_int, 67) => {
-                                print_str(rdm, "closure", C.strlen("closure"));
+                                print_str(rdm, "closure", std.mem.len("closure"));
                                 break;
                             },
                             @as(c_int, 83) => {
-                                print_str(rdm, "shim", C.strlen("shim"));
+                                print_str(rdm, "shim", std.mem.len("shim"));
                                 break;
                             },
                             else => {
@@ -493,15 +492,15 @@ pub fn demangle_path(arg_rdm: [*c]struct_rust_demangler, arg_in_value: c_int) ca
                         break;
                     }
                     if ((name.ascii != null) or (name.punycode != null)) {
-                        print_str(rdm, ":", C.strlen(":"));
+                        print_str(rdm, ":", std.mem.len(":"));
                         print_ident(rdm, name);
                     }
-                    print_str(rdm, "#", C.strlen("#"));
+                    print_str(rdm, "#", std.mem.len("#"));
                     print_uint64(rdm, dis);
-                    print_str(rdm, "}", C.strlen("}"));
+                    print_str(rdm, "}", std.mem.len("}"));
                 } else {
                     if ((name.ascii != null) or (name.punycode != null)) {
-                        print_str(rdm, "::", C.strlen("::"));
+                        print_str(rdm, "::", std.mem.len("::"));
                         print_ident(rdm, name);
                     }
                 }
@@ -513,41 +512,41 @@ pub fn demangle_path(arg_rdm: [*c]struct_rust_demangler, arg_in_value: c_int) ca
                 rdm.*.skipping_printing = 1;
                 demangle_path(rdm, in_value);
                 rdm.*.skipping_printing = was_skipping_printing;
-                print_str(rdm, "<", C.strlen("<"));
+                print_str(rdm, "<", std.mem.len("<"));
                 demangle_type(rdm);
                 if (@bitCast(c_int, @as(c_uint, tag)) != @as(c_int, 'M')) {
-                    print_str(rdm, " as ", C.strlen(" as "));
+                    print_str(rdm, " as ", std.mem.len(" as "));
                     demangle_path(rdm, @as(c_int, 0));
                 }
-                print_str(rdm, ">", C.strlen(">"));
+                print_str(rdm, ">", std.mem.len(">"));
                 break;
             },
             @as(c_int, 89) => {
-                print_str(rdm, "<", C.strlen("<"));
+                print_str(rdm, "<", std.mem.len("<"));
                 demangle_type(rdm);
                 if (@bitCast(c_int, @as(c_uint, tag)) != @as(c_int, 'M')) {
-                    print_str(rdm, " as ", C.strlen(" as "));
+                    print_str(rdm, " as ", std.mem.len(" as "));
                     demangle_path(rdm, @as(c_int, 0));
                 }
-                print_str(rdm, ">", C.strlen(">"));
+                print_str(rdm, ">", std.mem.len(">"));
                 break;
             },
             @as(c_int, 73) => {
                 demangle_path(rdm, in_value);
                 if (in_value != 0) {
-                    print_str(rdm, "::", C.strlen("::"));
+                    print_str(rdm, "::", std.mem.len("::"));
                 }
-                print_str(rdm, "<", C.strlen("<"));
+                print_str(rdm, "<", std.mem.len("<"));
                 {
                     i = 0;
                     while (!(rdm.*.errored != 0) and !(eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'E')))) != 0)) : (i +%= 1) {
                         if (i > @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) {
-                            print_str(rdm, ", ", C.strlen(", "));
+                            print_str(rdm, ", ", std.mem.len(", "));
                         }
                         demangle_generic_arg(rdm);
                     }
                 }
-                print_str(rdm, ">", C.strlen(">"));
+                print_str(rdm, ">", std.mem.len(">"));
                 break;
             },
             @as(c_int, 66) => {
@@ -598,68 +597,68 @@ pub fn demangle_type(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
     tag = next(rdm);
     basic = basic_type(tag);
     if (basic != null) {
-        print_str(rdm, basic, C.strlen(basic));
+        print_str(rdm, basic, std.mem.len(basic));
         return;
     }
     while (true) {
         switch (@bitCast(c_int, @as(c_uint, tag))) {
             @as(c_int, 82), @as(c_int, 81) => {
-                print_str(rdm, "&", C.strlen("&"));
+                print_str(rdm, "&", std.mem.len("&"));
                 if (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'L')))) != 0) {
                     lt = parse_integer_62(rdm);
                     if (lt != 0) {
                         print_lifetime_from_index(rdm, lt);
-                        print_str(rdm, " ", C.strlen(" "));
+                        print_str(rdm, " ", std.mem.len(" "));
                     }
                 }
                 if (@bitCast(c_int, @as(c_uint, tag)) != @as(c_int, 'R')) {
-                    print_str(rdm, "mut ", C.strlen("mut "));
+                    print_str(rdm, "mut ", std.mem.len("mut "));
                 }
                 demangle_type(rdm);
                 break;
             },
             @as(c_int, 80), @as(c_int, 79) => {
-                print_str(rdm, "*", C.strlen("*"));
+                print_str(rdm, "*", std.mem.len("*"));
                 if (@bitCast(c_int, @as(c_uint, tag)) != @as(c_int, 'P')) {
-                    print_str(rdm, "mut ", C.strlen("mut "));
+                    print_str(rdm, "mut ", std.mem.len("mut "));
                 } else {
-                    print_str(rdm, "const ", C.strlen("const "));
+                    print_str(rdm, "const ", std.mem.len("const "));
                 }
                 demangle_type(rdm);
                 break;
             },
             @as(c_int, 65), @as(c_int, 83) => {
-                print_str(rdm, "[", C.strlen("["));
+                print_str(rdm, "[", std.mem.len("["));
                 demangle_type(rdm);
                 if (@bitCast(c_int, @as(c_uint, tag)) == @as(c_int, 'A')) {
-                    print_str(rdm, "; ", C.strlen("; "));
+                    print_str(rdm, "; ", std.mem.len("; "));
                     demangle_const(rdm);
                 }
-                print_str(rdm, "]", C.strlen("]"));
+                print_str(rdm, "]", std.mem.len("]"));
                 break;
             },
             @as(c_int, 84) => {
-                print_str(rdm, "(", C.strlen("("));
+                print_str(rdm, "(", std.mem.len("("));
                 {
                     i = 0;
                     while (!(rdm.*.errored != 0) and !(eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'E')))) != 0)) : (i +%= 1) {
                         if (i > @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) {
-                            print_str(rdm, ", ", C.strlen(", "));
+                            print_str(rdm, ", ", std.mem.len(", "));
                         }
                         demangle_type(rdm);
                     }
                 }
                 if (i == @bitCast(c_ulong, @as(c_long, @as(c_int, 1)))) {
-                    print_str(rdm, ",", C.strlen(","));
+                    print_str(rdm, ",", std.mem.len(","));
                 }
-                print_str(rdm, ")", C.strlen(")"));
+                print_str(rdm, ")", std.mem.len(")"));
                 break;
             },
             @as(c_int, 70) => {
                 old_bound_lifetime_depth = rdm.*.bound_lifetime_depth;
                 demangle_binder(rdm);
                 if (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'U')))) != 0) {
-                    print_str(rdm, "unsafe ", C.strlen("unsafe "));
+                    print_str(rdm, "unsafe ", std.mem.len("unsafe "));
                 }
                 if (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'K')))) != 0) {
                     if (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'C')))) != 0) {
@@ -672,13 +671,13 @@ pub fn demangle_type(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
                             break;
                         }
                     }
-                    print_str(rdm, "extern \"", C.strlen("extern \""));
+                    print_str(rdm, "extern \"", std.mem.len("extern \""));
                     {
                         i = 0;
                         while (i < abi.ascii_len) : (i +%= 1) {
                             if (@bitCast(c_int, @as(c_uint, abi.ascii[i])) == @as(c_int, '_')) {
                                 print_str(rdm, abi.ascii, i);
-                                print_str(rdm, "-", C.strlen("-"));
+                                print_str(rdm, "-", std.mem.len("-"));
                                 abi.ascii += i +% @bitCast(c_ulong, @as(c_long, @as(c_int, 1)));
                                 abi.ascii_len -%= i +% @bitCast(c_ulong, @as(c_long, @as(c_int, 1)));
                                 i = 0;
@@ -686,35 +685,35 @@ pub fn demangle_type(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
                         }
                     }
                     print_str(rdm, abi.ascii, abi.ascii_len);
-                    print_str(rdm, "\" ", C.strlen("\" "));
+                    print_str(rdm, "\" ", std.mem.len("\" "));
                 }
-                print_str(rdm, "fn(", C.strlen("fn("));
+                print_str(rdm, "fn(", std.mem.len("fn("));
                 {
                     i = 0;
                     while (!(rdm.*.errored != 0) and !(eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'E')))) != 0)) : (i +%= 1) {
                         if (i > @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) {
-                            print_str(rdm, ", ", C.strlen(", "));
+                            print_str(rdm, ", ", std.mem.len(", "));
                         }
                         demangle_type(rdm);
                     }
                 }
-                print_str(rdm, ")", C.strlen(")"));
+                print_str(rdm, ")", std.mem.len(")"));
                 if (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'u')))) != 0) {} else {
-                    print_str(rdm, " -> ", C.strlen(" -> "));
+                    print_str(rdm, " -> ", std.mem.len(" -> "));
                     demangle_type(rdm);
                 }
                 rdm.*.bound_lifetime_depth = old_bound_lifetime_depth;
                 break;
             },
             @as(c_int, 68) => {
-                print_str(rdm, "dyn ", C.strlen("dyn "));
+                print_str(rdm, "dyn ", std.mem.len("dyn "));
                 old_bound_lifetime_depth = rdm.*.bound_lifetime_depth;
                 demangle_binder(rdm);
                 {
                     i = 0;
                     while (!(rdm.*.errored != 0) and !(eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'E')))) != 0)) : (i +%= 1) {
                         if (i > @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) {
-                            print_str(rdm, " + ", C.strlen(" + "));
+                            print_str(rdm, " + ", std.mem.len(" + "));
                         }
                         demangle_dyn_trait(rdm);
                     }
@@ -726,7 +725,7 @@ pub fn demangle_type(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
                 }
                 lt = parse_integer_62(rdm);
                 if (lt != 0) {
-                    print_str(rdm, " + ", C.strlen(" + "));
+                    print_str(rdm, " + ", std.mem.len(" + "));
                     print_lifetime_from_index(rdm, lt);
                 }
                 break;
@@ -767,13 +766,13 @@ pub fn demangle_path_maybe_open_generics(arg_rdm: [*c]struct_rust_demangler) cal
         }
     } else if (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'I')))) != 0) {
         demangle_path(rdm, @as(c_int, 0));
-        print_str(rdm, "<", C.strlen("<"));
+        print_str(rdm, "<", std.mem.len("<"));
         open = 1;
         {
             i = 0;
             while (!(rdm.*.errored != 0) and !(eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'E')))) != 0)) : (i +%= 1) {
                 if (i > @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) {
-                    print_str(rdm, ", ", C.strlen(", "));
+                    print_str(rdm, ", ", std.mem.len(", "));
                 }
                 demangle_generic_arg(rdm);
             }
@@ -791,18 +790,18 @@ pub fn demangle_dyn_trait(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void 
     open = demangle_path_maybe_open_generics(rdm);
     while (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'p')))) != 0) {
         if (!(open != 0)) {
-            print_str(rdm, "<", C.strlen("<"));
+            print_str(rdm, "<", std.mem.len("<"));
         } else {
-            print_str(rdm, ", ", C.strlen(", "));
+            print_str(rdm, ", ", std.mem.len(", "));
         }
         open = 1;
         name = parse_ident(rdm);
         print_ident(rdm, name);
-        print_str(rdm, " = ", C.strlen(" = "));
+        print_str(rdm, " = ", std.mem.len(" = "));
         demangle_type(rdm);
     }
     if (open != 0) {
-        print_str(rdm, ">", C.strlen(">"));
+        print_str(rdm, ">", std.mem.len(">"));
     }
 }
 pub fn demangle_const(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
@@ -833,13 +832,13 @@ pub fn demangle_const(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
         break;
     }
     if (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'p')))) != 0) {
-        print_str(rdm, "_", C.strlen("_"));
+        print_str(rdm, "_", std.mem.len("_"));
     } else {
         demangle_const_uint(rdm);
     }
     if (rdm.*.verbose != 0) {
-        print_str(rdm, ": ", C.strlen(": "));
-        print_str(rdm, basic_type(ty_tag), C.strlen(basic_type(ty_tag)));
+        print_str(rdm, ": ", std.mem.len(": "));
+        print_str(rdm, basic_type(ty_tag), std.mem.len(basic_type(ty_tag)));
     }
 }
 pub fn demangle_const_uint(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
@@ -851,7 +850,7 @@ pub fn demangle_const_uint(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void
     value = 0;
     hex_len = 0;
     while (!(eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, '_')))) != 0)) {
-        value <<= @intCast(@import("std").math.Log2Int(c_int), @as(c_int, 4));
+        value <<= @intCast(std.math.Log2Int(c_int), @as(c_int, 4));
         c = next(rdm);
         if ((@bitCast(c_int, @as(c_uint, c)) >= @as(c_int, '0')) and (@bitCast(c_int, @as(c_uint, c)) <= @as(c_int, '9'))) {
             value |= @bitCast(c_ulong, @as(c_long, @bitCast(c_int, @as(c_uint, c)) - @as(c_int, '0')));
@@ -864,7 +863,7 @@ pub fn demangle_const_uint(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void
         hex_len +%= 1;
     }
     if (hex_len > @bitCast(c_ulong, @as(c_long, @as(c_int, 16)))) {
-        print_str(rdm, "0x", C.strlen("0x"));
+        print_str(rdm, "0x", std.mem.len("0x"));
         print_str(rdm, rdm.*.sym + (rdm.*.next -% hex_len), hex_len);
         return;
     }
@@ -914,7 +913,7 @@ pub fn is_legacy_prefixed_hash(arg_ident: struct_rust_mangled_ident) callconv(.C
         while (i < @bitCast(c_ulong, @as(c_long, @as(c_int, 16)))) : (i +%= 1) {
             nibble = decode_lower_hex_nibble(ident.ascii[@bitCast(c_ulong, @as(c_long, @as(c_int, 1))) +% i]);
             if (nibble < @as(c_int, 0)) return 0;
-            seen |= @bitCast(u16, @truncate(c_short, @bitCast(c_int, @as(c_uint, @bitCast(u16, @truncate(c_short, @as(c_int, 1))))) << @intCast(@import("std").math.Log2Int(c_int), nibble)));
+            seen |= @bitCast(u16, @truncate(c_short, @bitCast(c_int, @as(c_uint, @bitCast(u16, @truncate(c_short, @as(c_int, 1))))) << @intCast(std.math.Log2Int(c_int), nibble)));
         }
     }
     count = 0;
@@ -922,7 +921,7 @@ pub fn is_legacy_prefixed_hash(arg_ident: struct_rust_mangled_ident) callconv(.C
         if ((@bitCast(c_int, @as(c_uint, seen)) & @as(c_int, 1)) != 0) {
             count +%= 1;
         }
-        seen >>= @intCast(@import("std").math.Log2Int(c_int), @as(c_int, 1));
+        seen >>= @intCast(std.math.Log2Int(c_int), @as(c_int, 1));
     }
     return @boolToInt(count >= @bitCast(c_ulong, @as(c_long, @as(c_int, 5))));
 }
@@ -941,7 +940,7 @@ pub export fn rust_demangle_callback(arg_mangled: [*c]const u8, arg_options: c_i
     rdm.next = 0;
     rdm.errored = 0;
     rdm.skipping_printing = 0;
-    rdm.verbose = @boolToInt((options & (@as(c_int, 1) << @intCast(@import("std").math.Log2Int(c_int), 3))) != @as(c_int, 0));
+    rdm.verbose = @boolToInt((options & (@as(c_int, 1) << @intCast(std.math.Log2Int(c_int), 3))) != @as(c_int, 0));
     rdm.version = 0;
     rdm.bound_lifetime_depth = 0;
     if ((@bitCast(c_int, @as(c_uint, rdm.sym[@intCast(c_uint, @as(c_int, 0))])) == @as(c_int, '_')) and (@bitCast(c_int, @as(c_uint, rdm.sym[@intCast(c_uint, @as(c_int, 1))])) == @as(c_int, 'R'))) {
@@ -1024,9 +1023,9 @@ pub fn str_buf_reserve(arg_buf: [*c]struct_str_buf, arg_extra: usize) callconv(.
             return;
         }
     }
-    new_ptr = @ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), C.realloc(@ptrCast(?*anyopaque, buf.*.ptr), new_cap)));
-    if (new_ptr == @ptrCast([*c]u8, @alignCast(@import("std").meta.alignment([*c]u8), @intToPtr(?*anyopaque, @as(c_int, 0))))) {
-        C.free(@ptrCast(?*anyopaque, buf.*.ptr));
+    new_ptr = @ptrCast([*c]u8, @alignCast(std.meta.alignment([*c]u8), std.c.realloc(buf.*.ptr, new_cap)));
+    if (new_ptr == @ptrCast([*c]u8, @alignCast(std.meta.alignment([*c]u8), @intToPtr(?*anyopaque, @as(c_int, 0))))) {
+        std.c.free(buf.*.ptr);
         buf.*.ptr = null;
         buf.*.len = 0;
         buf.*.cap = 0;
@@ -1049,7 +1048,7 @@ pub fn str_buf_demangle_callback(arg_data: [*c]const u8, arg_len: usize, arg_opa
     var data = arg_data;
     var len = arg_len;
     var @"opaque" = arg_opaque;
-    str_buf_append(@ptrCast([*c]struct_str_buf, @alignCast(@import("std").meta.alignment([*c]struct_str_buf), @"opaque")), data, len);
+    str_buf_append(@ptrCast([*c]struct_str_buf, @alignCast(std.meta.alignment([*c]struct_str_buf), @"opaque")), data, len);
 }
 pub export fn rust_demangle(arg_mangled: [*c]const u8, arg_options: c_int) [*c]u8 {
     var mangled = arg_mangled;
@@ -1062,7 +1061,7 @@ pub export fn rust_demangle(arg_mangled: [*c]const u8, arg_options: c_int) [*c]u
     out.errored = 0;
     success = rust_demangle_callback(mangled, options, &str_buf_demangle_callback, @ptrCast(?*anyopaque, &out));
     if (!(success != 0)) {
-        C.free(@ptrCast(?*anyopaque, out.ptr));
+        std.c.free(out.ptr);
         return null;
     }
     str_buf_append(&out, "\x00", @bitCast(usize, @as(c_long, @as(c_int, 1))));

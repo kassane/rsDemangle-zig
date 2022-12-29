@@ -1,12 +1,7 @@
-const C = @cImport({
-    @cInclude("stdlib.h");
-    @cInclude("stdio.h");
-    @cInclude("string.h");
-});
 const std = @import("std");
 
 pub const demangle_callbackref = ?*const fn ([*c]const u8, usize, ?*anyopaque) callconv(.C) void;
-pub const struct_rust_demangler = extern struct {
+pub const rust_demangler = extern struct {
     sym: [*c]const u8,
     sym_len: usize,
     callback_opaque: ?*anyopaque,
@@ -18,12 +13,12 @@ pub const struct_rust_demangler = extern struct {
     version: c_int,
     bound_lifetime_depth: u64,
 };
-pub fn peek(arg_rdm: [*c]const struct_rust_demangler) callconv(.C) u8 {
+pub fn peek(arg_rdm: [*c]const rust_demangler) callconv(.C) u8 {
     var rdm = arg_rdm;
     if (rdm.*.next < rdm.*.sym_len) return rdm.*.sym[rdm.*.next];
     return 0;
 }
-pub fn eat(arg_rdm: [*c]struct_rust_demangler, arg_c: u8) callconv(.C) c_int {
+pub fn eat(arg_rdm: [*c]rust_demangler, arg_c: u8) callconv(.C) c_int {
     var rdm = arg_rdm;
     var c = arg_c;
     if (@bitCast(c_int, @as(c_uint, peek(rdm))) == @bitCast(c_int, @as(c_uint, c))) {
@@ -32,7 +27,7 @@ pub fn eat(arg_rdm: [*c]struct_rust_demangler, arg_c: u8) callconv(.C) c_int {
     } else return 0;
     return 0;
 }
-pub fn next(arg_rdm: [*c]struct_rust_demangler) callconv(.C) u8 {
+pub fn next(arg_rdm: [*c]rust_demangler) callconv(.C) u8 {
     var rdm = arg_rdm;
     var c: u8 = peek(rdm);
     if (!(c != 0)) {
@@ -42,7 +37,7 @@ pub fn next(arg_rdm: [*c]struct_rust_demangler) callconv(.C) u8 {
     }
     return c;
 }
-pub fn parse_integer_62(arg_rdm: [*c]struct_rust_demangler) callconv(.C) u64 {
+pub fn parse_integer_62(arg_rdm: [*c]rust_demangler) callconv(.C) u64 {
     var rdm = arg_rdm;
     var c: u8 = undefined;
     var x: u64 = undefined;
@@ -64,29 +59,29 @@ pub fn parse_integer_62(arg_rdm: [*c]struct_rust_demangler) callconv(.C) u64 {
     }
     return x +% @bitCast(c_ulong, @as(c_long, @as(c_int, 1)));
 }
-pub fn parse_opt_integer_62(arg_rdm: [*c]struct_rust_demangler, arg_tag: u8) callconv(.C) u64 {
+pub fn parse_opt_integer_62(arg_rdm: [*c]rust_demangler, arg_tag: u8) callconv(.C) u64 {
     var rdm = arg_rdm;
     var tag = arg_tag;
     if (!(eat(rdm, tag) != 0)) return 0;
     return @bitCast(c_ulong, @as(c_long, @as(c_int, 1))) +% parse_integer_62(rdm);
 }
-pub fn parse_disambiguator(arg_rdm: [*c]struct_rust_demangler) callconv(.C) u64 {
+pub fn parse_disambiguator(arg_rdm: [*c]rust_demangler) callconv(.C) u64 {
     var rdm = arg_rdm;
     return parse_opt_integer_62(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 's'))));
 }
-pub const struct_rust_mangled_ident = extern struct {
+pub const rust_mangled_ident = extern struct {
     ascii: [*c]const u8,
     ascii_len: usize,
     punycode: [*c]const u8,
     punycode_len: usize,
 };
-pub fn parse_ident(arg_rdm: [*c]struct_rust_demangler) callconv(.C) struct_rust_mangled_ident {
+pub fn parse_ident(arg_rdm: [*c]rust_demangler) callconv(.C) rust_mangled_ident {
     var rdm = arg_rdm;
     var c: u8 = undefined;
     var start: usize = undefined;
     var len: usize = undefined;
     var is_punycode: c_int = 0;
-    var ident: struct_rust_mangled_ident = undefined;
+    var ident: rust_mangled_ident = undefined;
     ident.ascii = null;
     ident.ascii_len = 0;
     ident.punycode = null;
@@ -132,7 +127,7 @@ pub fn parse_ident(arg_rdm: [*c]struct_rust_demangler) callconv(.C) struct_rust_
     }
     return ident;
 }
-pub fn print_str(arg_rdm: [*c]struct_rust_demangler, arg_data: [*c]const u8, arg_len: usize) callconv(.C) void {
+pub fn print_str(arg_rdm: [*c]rust_demangler, arg_data: [*c]const u8, arg_len: usize) callconv(.C) void {
     var rdm = arg_rdm;
     var data = arg_data;
     var len = arg_len;
@@ -140,13 +135,13 @@ pub fn print_str(arg_rdm: [*c]struct_rust_demangler, arg_data: [*c]const u8, arg
         rdm.*.callback.?(data, len, rdm.*.callback_opaque);
     }
 }
-pub fn print_uint64(arg_rdm: [*c]struct_rust_demangler, arg_x: u64) callconv(.C) void {
+pub fn print_uint64(arg_rdm: [*c]rust_demangler, arg_x: u64) callconv(.C) void {
     var rdm = arg_rdm;
     var s: [21]u8 = undefined;
     var x = std.fmt.bufPrintZ(&s, "{d}", .{arg_x}) catch @panic("fmt error");
     print_str(rdm, x, x.len);
 }
-pub fn print_uint64_hex(arg_rdm: [*c]struct_rust_demangler, arg_x: u64) callconv(.C) void {
+pub fn print_uint64_hex(arg_rdm: [*c]rust_demangler, arg_x: u64) callconv(.C) void {
     var rdm = arg_rdm;
     var s: [17]u8 = undefined;
     var x = std.fmt.bufPrintZ(&s, "{d}", .{arg_x}) catch @panic("fmt error");
@@ -203,7 +198,7 @@ pub fn decode_legacy_escape(arg_e: [*c]const u8, arg_len: usize, arg_out_len: [*
     out_len.* = @bitCast(c_ulong, @as(c_long, @as(c_int, 2))) +% escape_len;
     return c;
 }
-pub fn print_ident(arg_rdm: [*c]struct_rust_demangler, arg_ident: struct_rust_mangled_ident) callconv(.C) void {
+pub fn print_ident(arg_rdm: [*c]rust_demangler, arg_ident: rust_mangled_ident) callconv(.C) void {
     var rdm = arg_rdm;
     var ident = arg_ident;
     var unescaped: u8 = undefined;
@@ -353,7 +348,7 @@ pub fn print_ident(arg_rdm: [*c]struct_rust_demangler, arg_ident: struct_rust_ma
         }
         out = p;
         p = out + (i *% @bitCast(c_ulong, @as(c_long, @as(c_int, 4))));
-        _ = C.memmove(@ptrCast(?*anyopaque, p + 4), @ptrCast(?*const anyopaque, p), ((len -% i) -% 1) *% 4);
+        _ = memmove(@ptrCast(?*anyopaque, p + 4), @ptrCast(?*const anyopaque, p), ((len -% i) -% 1) *% 4);
         p[@intCast(c_uint, @as(c_int, 0))] = @bitCast(u8, @truncate(u8, if (c >= @bitCast(c_uint, @as(c_int, 65536))) @bitCast(c_uint, @as(c_int, 240)) | (c >> @intCast(u5, 18)) else @bitCast(c_uint, @as(c_int, 0))));
         p[@intCast(c_uint, @as(c_int, 1))] = @bitCast(u8, @truncate(u8, if (c >= @bitCast(c_uint, @as(c_int, 2048))) @bitCast(c_uint, if (c < @bitCast(c_uint, @as(c_int, 65536))) @as(c_int, 224) else @as(c_int, 128)) | ((c >> @intCast(u5, 12)) & @bitCast(c_uint, @as(c_int, 63))) else @bitCast(c_uint, @as(c_int, 0))));
         p[@intCast(c_uint, @as(c_int, 2))] = @bitCast(u8, @truncate(u8, @bitCast(c_uint, if (c < @bitCast(c_uint, @as(c_int, 2048))) @as(c_int, 192) else @as(c_int, 128)) | ((c >> @intCast(u5, 6)) & @bitCast(c_uint, @as(c_int, 63)))));
@@ -395,7 +390,7 @@ pub fn print_ident(arg_rdm: [*c]struct_rust_demangler, arg_ident: struct_rust_ma
         std.c.free(out);
     }
 }
-pub fn print_lifetime_from_index(arg_rdm: [*c]struct_rust_demangler, arg_lt: u64) callconv(.C) void {
+pub fn print_lifetime_from_index(arg_rdm: [*c]rust_demangler, arg_lt: u64) callconv(.C) void {
     var rdm = arg_rdm;
     var lt = arg_lt;
     var c: u8 = undefined;
@@ -414,7 +409,7 @@ pub fn print_lifetime_from_index(arg_rdm: [*c]struct_rust_demangler, arg_lt: u64
         print_uint64(rdm, depth);
     }
 }
-pub fn demangle_binder(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
+pub fn demangle_binder(arg_rdm: [*c]rust_demangler) callconv(.C) void {
     var rdm = arg_rdm;
     var i: u64 = undefined;
     var bound_lifetimes: u64 = undefined;
@@ -435,7 +430,7 @@ pub fn demangle_binder(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
         print_str(rdm, "> ", std.mem.len("> "));
     }
 }
-pub fn demangle_path(arg_rdm: [*c]struct_rust_demangler, arg_in_value: c_int) callconv(.C) void {
+pub fn demangle_path(arg_rdm: [*c]rust_demangler, arg_in_value: c_int) callconv(.C) void {
     var rdm = arg_rdm;
     var in_value = arg_in_value;
     var tag: u8 = undefined;
@@ -445,7 +440,7 @@ pub fn demangle_path(arg_rdm: [*c]struct_rust_demangler, arg_in_value: c_int) ca
     var backref: usize = undefined;
     var old_next: usize = undefined;
     var dis: u64 = undefined;
-    var name: struct_rust_mangled_ident = undefined;
+    var name: rust_mangled_ident = undefined;
     if (rdm.*.errored != 0) return;
     while (true) {
         switch (@bitCast(c_int, @as(c_uint, blk: {
@@ -567,7 +562,7 @@ pub fn demangle_path(arg_rdm: [*c]struct_rust_demangler, arg_in_value: c_int) ca
         break;
     }
 }
-pub fn demangle_generic_arg(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
+pub fn demangle_generic_arg(arg_rdm: [*c]rust_demangler) callconv(.C) void {
     var rdm = arg_rdm;
     var lt: u64 = undefined;
     if (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'L')))) != 0) {
@@ -581,7 +576,7 @@ pub fn demangle_generic_arg(arg_rdm: [*c]struct_rust_demangler) callconv(.C) voi
 }
 // src/rust-demangle.c:834:3: warning: TODO implement translation of stmt class LabelStmtClass
 // src/rust-demangle.c:717:13: warning: unable to translate function, demoted to extern
-pub fn demangle_type(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
+pub fn demangle_type(arg_rdm: [*c]rust_demangler) callconv(.C) void {
     var rdm = arg_rdm;
     var tag: u8 = undefined;
     var i: usize = undefined;
@@ -590,7 +585,7 @@ pub fn demangle_type(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
     var lt: u64 = undefined;
     var old_bound_lifetime_depth: u64 = undefined;
     var basic: [*c]const u8 = undefined;
-    var abi: struct_rust_mangled_ident = undefined;
+    var abi: rust_mangled_ident = undefined;
     var @"error": c_int = 0;
     _ = @TypeOf(@"error");
     if (rdm.*.errored != 0) return;
@@ -748,7 +743,7 @@ pub fn demangle_type(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
         break;
     }
 }
-pub fn demangle_path_maybe_open_generics(arg_rdm: [*c]struct_rust_demangler) callconv(.C) c_int {
+pub fn demangle_path_maybe_open_generics(arg_rdm: [*c]rust_demangler) callconv(.C) c_int {
     var rdm = arg_rdm;
     var open: c_int = undefined;
     var i: usize = undefined;
@@ -782,10 +777,10 @@ pub fn demangle_path_maybe_open_generics(arg_rdm: [*c]struct_rust_demangler) cal
     }
     return open;
 }
-pub fn demangle_dyn_trait(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
+pub fn demangle_dyn_trait(arg_rdm: [*c]rust_demangler) callconv(.C) void {
     var rdm = arg_rdm;
     var open: c_int = undefined;
-    var name: struct_rust_mangled_ident = undefined;
+    var name: rust_mangled_ident = undefined;
     if (rdm.*.errored != 0) return;
     open = demangle_path_maybe_open_generics(rdm);
     while (eat(rdm, @bitCast(u8, @truncate(i8, @as(c_int, 'p')))) != 0) {
@@ -804,7 +799,7 @@ pub fn demangle_dyn_trait(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void 
         print_str(rdm, ">", std.mem.len(">"));
     }
 }
-pub fn demangle_const(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
+pub fn demangle_const(arg_rdm: [*c]rust_demangler) callconv(.C) void {
     var rdm = arg_rdm;
     var ty_tag: u8 = undefined;
     var old_next: usize = undefined;
@@ -841,7 +836,7 @@ pub fn demangle_const(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
         print_str(rdm, basic_type(ty_tag), std.mem.len(basic_type(ty_tag)));
     }
 }
-pub fn demangle_const_uint(arg_rdm: [*c]struct_rust_demangler) callconv(.C) void {
+pub fn demangle_const_uint(arg_rdm: [*c]rust_demangler) callconv(.C) void {
     var rdm = arg_rdm;
     var c: u8 = undefined;
     var hex_len: usize = undefined;
@@ -900,7 +895,7 @@ pub fn basic_type(arg_tag: u8) callconv(.C) [*c]const u8 {
     }
     return null;
 }
-pub fn is_legacy_prefixed_hash(arg_ident: struct_rust_mangled_ident) callconv(.C) c_int {
+pub fn is_legacy_prefixed_hash(arg_ident: rust_mangled_ident) callconv(.C) c_int {
     var ident = arg_ident;
     var seen: u16 = undefined;
     var nibble: c_int = undefined;
@@ -931,8 +926,8 @@ pub export fn rust_demangle_callback(arg_mangled: [*c]const u8, arg_options: c_i
     var callback = arg_callback;
     var @"opaque" = arg_opaque;
     var p: [*c]const u8 = undefined;
-    var rdm: struct_rust_demangler = undefined;
-    var ident: struct_rust_mangled_ident = undefined;
+    var rdm: rust_demangler = undefined;
+    var ident: rust_mangled_ident = undefined;
     rdm.sym = mangled;
     rdm.sym_len = 0;
     rdm.callback_opaque = @"opaque";
@@ -962,7 +957,7 @@ pub export fn rust_demangle_callback(arg_mangled: [*c]const u8, arg_options: c_i
     if (rdm.version == -@as(c_int, 1)) {
         if (!((rdm.sym_len > @bitCast(c_ulong, @as(c_long, @as(c_int, 0)))) and (@bitCast(c_int, @as(c_uint, rdm.sym[rdm.sym_len -% @bitCast(c_ulong, @as(c_long, @as(c_int, 1)))])) == @as(c_int, 'E')))) return 0;
         rdm.sym_len -%= 1;
-        if (!((rdm.sym_len > @bitCast(c_ulong, @as(c_long, @as(c_int, 19)))) and !(C.memcmp(@ptrCast(?*const anyopaque, &rdm.sym[rdm.sym_len -% @bitCast(c_ulong, @as(c_long, @as(c_int, 19)))]), @ptrCast(?*const anyopaque, "17h"), @bitCast(c_ulong, @as(c_long, @as(c_int, 3)))) != 0))) return 0;
+        if (!((rdm.sym_len > @bitCast(c_ulong, @as(c_long, @as(c_int, 19)))) and !(memcmp(@ptrCast(?*const anyopaque, &rdm.sym[rdm.sym_len -% @bitCast(c_ulong, @as(c_long, @as(c_int, 19)))]), @ptrCast(?*const anyopaque, "17h"), @bitCast(c_ulong, @as(c_long, @as(c_int, 3)))) != 0))) return 0;
         while (true) {
             ident = parse_ident(&rdm);
             if ((rdm.errored != 0) or !(ident.ascii != null)) return 0;
@@ -991,13 +986,13 @@ pub export fn rust_demangle_callback(arg_mangled: [*c]const u8, arg_options: c_i
     }
     return @boolToInt(!(rdm.errored != 0));
 }
-pub const struct_str_buf = extern struct {
+pub const str_buf = extern struct {
     ptr: [*c]u8,
     len: usize,
     cap: usize,
     errored: c_int,
 };
-pub fn str_buf_reserve(arg_buf: [*c]struct_str_buf, arg_extra: usize) callconv(.C) void {
+pub fn str_buf_reserve(arg_buf: [*c]str_buf, arg_extra: usize) callconv(.C) void {
     var buf = arg_buf;
     var extra = arg_extra;
     var available: usize = undefined;
@@ -1035,25 +1030,25 @@ pub fn str_buf_reserve(arg_buf: [*c]struct_str_buf, arg_extra: usize) callconv(.
         buf.*.cap = new_cap;
     }
 }
-pub fn str_buf_append(arg_buf: [*c]struct_str_buf, arg_data: [*c]const u8, arg_len: usize) callconv(.C) void {
+pub fn str_buf_append(arg_buf: [*c]str_buf, arg_data: [*c]const u8, arg_len: usize) callconv(.C) void {
     var buf = arg_buf;
     var data = arg_data;
     var len = arg_len;
     str_buf_reserve(buf, len);
     if (buf.*.errored != 0) return;
-    _ = C.memcpy(@ptrCast(?*anyopaque, buf.*.ptr + buf.*.len), @ptrCast(?*const anyopaque, data), len);
+    _ = memcpy(@ptrCast(?*anyopaque, buf.*.ptr + buf.*.len), @ptrCast(?*const anyopaque, data), len);
     buf.*.len +%= len;
 }
 pub fn str_buf_demangle_callback(arg_data: [*c]const u8, arg_len: usize, arg_opaque: ?*anyopaque) callconv(.C) void {
     var data = arg_data;
     var len = arg_len;
     var @"opaque" = arg_opaque;
-    str_buf_append(@ptrCast([*c]struct_str_buf, @alignCast(std.meta.alignment([*c]struct_str_buf), @"opaque")), data, len);
+    str_buf_append(@ptrCast([*c]str_buf, @alignCast(std.meta.alignment([*c]str_buf), @"opaque")), data, len);
 }
 pub export fn rust_demangle(arg_mangled: [*c]const u8, arg_options: c_int) [*c]u8 {
     var mangled = arg_mangled;
     var options = arg_options;
-    var out: struct_str_buf = undefined;
+    var out: str_buf = undefined;
     var success: c_int = undefined;
     out.ptr = null;
     out.len = 0;
@@ -1068,6 +1063,7 @@ pub export fn rust_demangle(arg_mangled: [*c]const u8, arg_options: c_int) [*c]u
     return out.ptr;
 }
 
-pub const rust_demangler = struct_rust_demangler;
-pub const rust_mangled_ident = struct_rust_mangled_ident;
-pub const str_buf = struct_str_buf;
+// C API
+pub extern fn memmove(__dst: ?*anyopaque, __src: ?*const anyopaque, __len: c_ulong) ?*anyopaque;
+pub extern fn memcmp(__s1: ?*const anyopaque, __s2: ?*const anyopaque, __n: c_ulong) c_int;
+pub extern fn memcpy(__dst: ?*anyopaque, __src: ?*const anyopaque, __n: c_ulong) ?*anyopaque;
